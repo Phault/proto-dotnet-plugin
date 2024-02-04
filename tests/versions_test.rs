@@ -2,11 +2,11 @@ use proto_pdk_test_utils::*;
 use starbase_sandbox::create_empty_sandbox;
 
 generate_resolve_versions_tests!("dotnet-test", {
-    "3" => "3.0.103",
+    "3" => "3.1.426",
     "3.0" => "3.0.103",
     "3.0.103" => "3.0.103",
-    "3.0.100-rc1" => "3.0.100-rc1",
-    "3.0.100-preview9" => "3.0.100-preview9",
+    "3.0.100-rc1.19458.1" => "3.0.100-rc1.19458.1",
+    "3.0.100-preview9.19426.11" => "3.0.100-preview9.19426.11",
 });
 
 #[test]
