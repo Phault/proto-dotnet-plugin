@@ -1,4 +1,4 @@
-# .NET plugin
+# proto .NET plugin
 
 [.NET](https://dotnet.microsoft.com/) WASM plugin for [proto](https://github.com/moonrepo/proto).
 
