@@ -30,3 +30,20 @@ fn sets_latest_alias() {
     assert!(output.aliases.contains_key("latest"));
     assert_eq!(output.aliases.get("latest"), output.latest.as_ref());
 }
+
+// TODO: add tests for all the `rollForward` options
+#[test]
+fn parses_globaljson() {
+    let sandbox = create_empty_sandbox();
+    let plugin = create_plugin("dotnet-test", sandbox.path());
+
+    assert_eq!(
+        plugin.parse_version_file(ParseVersionFileInput {
+            content: r#"{ "sdk": { "version": "8.0.0", "rollForward": "latestFeature" } }"#.into(),
+            file: "global.json".into(),
+        }),
+        ParseVersionFileOutput {
+            version: Some(UnresolvedVersionSpec::parse("~8.0.0").unwrap()),
+        }
+    );
+}

@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use extism_pdk::*;
 use proto_pdk::*;
 
-use crate::release_index::{fetch_channel_releases, fetch_release_index};
+use crate::{
+    global_json::GlobalJson,
+    release_index::{fetch_channel_releases, fetch_release_index},
+};
 
 static NAME: &str = ".NET";
 static BIN: &str = "dotnet";
@@ -92,10 +95,12 @@ pub fn detect_version_files(_: ()) -> FnResult<Json<DetectVersionOutput>> {
 pub fn parse_version_file(
     Json(input): Json<ParseVersionFileInput>,
 ) -> FnResult<Json<ParseVersionFileOutput>> {
-    let output = ParseVersionFileOutput::default();
+    let mut output = ParseVersionFileOutput::default();
 
-    if input.file == "global.json" && !input.content.is_empty() {
-        // TODO: parse and convert the odd rollForward stuff into a semver range
+    if input.file == "global.json" {
+        if let Ok(global_json) = json::from_str::<GlobalJson>(&input.content) {
+            output.version = global_json.sdk.unwrap_or_default().to_version_spec().ok();
+        }
     }
 
     Ok(Json(output))
