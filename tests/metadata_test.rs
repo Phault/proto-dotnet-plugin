@@ -9,7 +9,7 @@ fn registers_metadata() {
     assert_eq!(
         plugin.register_tool(ToolMetadataInput::default()),
         ToolMetadataOutput {
-            name: "dotnet".into(),
+            name: ".NET".into(),
             type_of: PluginType::Language,
             plugin_version: Some(env!("CARGO_PKG_VERSION").into()),
             ..ToolMetadataOutput::default()

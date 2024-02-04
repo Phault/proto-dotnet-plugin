@@ -5,7 +5,7 @@ use proto_pdk::*;
 
 use crate::release_index::{fetch_channel_releases, fetch_release_index};
 
-static NAME: &str = "dotnet";
+static NAME: &str = ".NET";
 static BIN: &str = "dotnet";
 
 #[plugin_fn]
