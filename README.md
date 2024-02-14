@@ -18,6 +18,11 @@ Or preferably pin a specific version, to avoid nasty surprises if we mess up a r
 dotnet = "source:https://github.com/Phault/proto-dotnet-plugin/releases/download/vX.Y.Z/dotnet_plugin.wasm"
 ```
 
+This plugin relies on two assumptions:
+
+- As the SDKs will be installed to the location your `DOTNET_ROOT` environment variable points to, it **must** be a user-writable location. This is usually `~/.dotnet` which is also the default location if the variable is not defined.
+- The location for your `DOTNET_ROOT` must be in your `PATH`, as we do not shim or symlink it like other proto plugins.
+
 ## Usage
 
 ```shell
