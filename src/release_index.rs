@@ -74,15 +74,3 @@ pub fn fetch_release_index() -> Result<Vec<DotnetReleasesIndex>, Error> {
         .map(|r: DotnetReleasesIndexJson| r.releases_index)
         .map_err(|e| e.context(format!("Failed to retrieve index of releases")))
 }
-
-pub fn fetch_channel_releases(channel_version: &str) -> Result<Vec<DotnetRelease>, Error> {
-    fetch_url(format!(
-        "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/{channel_version}/releases.json"
-    ))
-    .map(|r: DotnetReleasesJson| r.releases)
-    .map_err(|e| {
-        e.context(format!(
-            "Failed to retrieve releases for channel '{channel_version}'"
-        ))
-    })
-}

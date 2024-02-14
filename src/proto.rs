@@ -1,12 +1,16 @@
-use std::collections::HashMap;
+use std::{fs, path::PathBuf};
 
 use extism_pdk::*;
 use proto_pdk::*;
 
 use crate::{
-    global_json::GlobalJson,
-    release_index::{fetch_channel_releases, fetch_release_index},
+    global_json::GlobalJson, helpers::get_dotnet_root, release_index::fetch_release_index,
 };
+
+#[host_fn]
+extern "ExtismHost" {
+    fn exec_command(input: Json<ExecCommandInput>) -> Json<ExecCommandOutput>;
+}
 
 static NAME: &str = ".NET";
 static BIN: &str = "dotnet";
@@ -17,6 +21,11 @@ pub fn register_tool(Json(_): Json<ToolMetadataInput>) -> FnResult<Json<ToolMeta
         name: NAME.into(),
         type_of: PluginType::Language,
         plugin_version: Some(env!("CARGO_PKG_VERSION").into()),
+        inventory: ToolInventoryMetadata {
+            // we'll stream the output from the dotnet-install script instead
+            disable_progress_bars: true,
+            ..Default::default()
+        },
         ..ToolMetadataOutput::default()
     }))
 }
@@ -107,140 +116,88 @@ pub fn parse_version_file(
 }
 
 #[plugin_fn]
-pub fn download_prebuilt(
-    Json(input): Json<DownloadPrebuiltInput>,
-) -> FnResult<Json<DownloadPrebuiltOutput>> {
+pub fn native_install(
+    Json(input): Json<NativeInstallInput>,
+) -> FnResult<Json<NativeInstallOutput>> {
     let env = get_host_environment()?;
-    check_supported_os_and_arch(
-        NAME,
-        &env,
-        permutations! [
-            HostOS::Linux => [
-                HostArch::X86, HostArch::X64, HostArch::Arm, HostArch::Arm64
-            ],
-            HostOS::MacOS => [HostArch::X64, HostArch::Arm64],
-            HostOS::Windows => [HostArch::X86, HostArch::X64, HostArch::Arm64],
-        ],
-    )?;
 
-    let version = match input.context.version {
-        VersionSpec::Canary => Err(plugin_err!(PluginError::UnsupportedCanary {
-            tool: NAME.into(),
-        })),
-        VersionSpec::Version(v) => Ok(v),
-        VersionSpec::Alias(alias) => {
-            // uncertain if this code ever runs, as Proto will seemingly always resolve aliases via resolve_version first?
+    let version = &input.context.version;
 
-            let releases_index = fetch_release_index()?;
-
-            let channel = match alias.to_lowercase().as_str() {
-                "latest" => releases_index.first(),
-                "lts" | "sts" => releases_index
-                    .iter()
-                    .find(|x| x.release_type.eq_ignore_ascii_case(&alias)),
-                _ => None,
-            };
-
-            match channel {
-                Some(c) => Version::parse(&c.latest_sdk).map_err(|e| plugin_err!(e)),
-                None => Err(plugin_err!(PluginError::Message(format!(
-                    "Alias '{alias}' is not supported"
-                )))),
-            }
-        }
-    }?;
-
-    let channel_version = format!("{}.{}", version.major, version.minor);
-    let releases = fetch_channel_releases(&channel_version)?;
-
-    let sdk = releases
-        .iter()
-        .flat_map(|release| {
-            release
-                .sdks
-                .to_owned()
-                .unwrap_or(vec![release.sdk.to_owned()])
-        })
-        .find(|sdk| version.to_string().eq(&sdk.version));
-
-    if sdk.is_none() {
-        return Err(plugin_err!(PluginError::Message(
-            "Failed to find release matching '{version}'".into()
-        )));
-    }
-
-    let arch = match env.arch {
-        HostArch::X86 => "x86",
-        HostArch::X64 => "x64",
-        HostArch::Arm => "arm",
-        HostArch::Arm64 => "arm64",
-        _ => unreachable!(),
-    };
-
-    let os = match env.os {
-        HostOS::Linux => {
-            if is_musl(&env) {
-                "linux-musl"
-            } else {
-                "linux"
-            }
-        }
-        HostOS::MacOS => "osx",
-        HostOS::Windows => "win",
-        _ => unreachable!(),
-    };
-
-    let rid = format!("{os}-{arch}");
-
-    let file_ext = match env.os {
-        HostOS::Windows => ".zip",
-        _ => ".tar.gz",
-    };
-
-    let sdk = sdk.unwrap();
-    let file = sdk.files.iter().find(|f| {
-        f.rid.as_ref().is_some_and(|file_rid| file_rid.eq(&rid)) && f.name.ends_with(&file_ext)
+    let is_windows = env.os.is_windows();
+    let script_path = PathBuf::from("/proto/temp").join(if is_windows {
+        "dotnet-install.ps1"
+    } else {
+        "dotnet-install.sh"
     });
 
-    match file {
-        Some(file) => Ok(Json(DownloadPrebuiltOutput {
-            download_url: file.url.to_owned(),
-            download_name: file.name.to_owned().into(),
-            ..DownloadPrebuiltOutput::default()
-        })),
-        None => Err(plugin_err!(PluginError::Message(format!(
-            "Unable to install {NAME}, unable to find build fitting {rid}."
-        )))),
+    if !script_path.exists() {
+        fs::write(
+            &script_path,
+            fetch(
+                HttpRequest::new(if is_windows {
+                    "https://dot.net/v1/dotnet-install.ps1"
+                } else {
+                    "https://dot.net/v1/dotnet-install.sh"
+                }),
+                None,
+            )?
+            .body(),
+        )?;
     }
+
+    let command_output = exec_command!(
+        input,
+        ExecCommandInput {
+            command: script_path.to_string_lossy().to_string(),
+            args: vec![
+                "-Version".into(),
+                version.to_string(),
+                "-InstallDir".into(),
+                get_dotnet_root(&env)?
+                    .to_str()
+                    .ok_or(anyhow!("unable to deduce installation dir"))?
+                    .to_owned(),
+                "-NoPath".into()
+            ],
+            set_executable: true,
+            stream: true,
+            ..ExecCommandInput::default()
+        }
+    );
+
+    Ok(Json(NativeInstallOutput {
+        installed: command_output.exit_code == 0,
+        ..NativeInstallOutput::default()
+    }))
+}
+
+#[plugin_fn]
+pub fn native_uninstall(
+    Json(_input): Json<NativeUninstallInput>,
+) -> FnResult<Json<NativeUninstallOutput>> {
+    warn!("Uninstalling .NET sdks is not currently supported, as they all share their installation folder.");
+
+    Ok(Json(NativeUninstallOutput {
+        uninstalled: false,
+        ..NativeUninstallOutput::default()
+    }))
 }
 
 #[plugin_fn]
 pub fn locate_executables(
-    Json(input): Json<LocateExecutablesInput>,
+    Json(_input): Json<LocateExecutablesInput>,
 ) -> FnResult<Json<LocateExecutablesOutput>> {
     let env = get_host_environment()?;
-    let tool_dir = input.context.tool_dir.real_path();
-
     let exe_name = env.os.get_exe_name(BIN);
-    let mut primary = ExecutableConfig::new(&exe_name);
-    primary.shim_env_vars = Some(HashMap::from_iter([
-        (
-            "DOTNET_ROOT".into(),
-            tool_dir
-                .clone()
-                .into_os_string()
-                .into_string()
-                .unwrap_or_default(),
-        ),
-        (
-            "DOTNET_HOST_PATH".into(),
-            tool_dir
-                .join(&exe_name)
-                .into_os_string()
-                .into_string()
-                .unwrap_or_default(),
-        ),
-    ]));
+    let mut primary = ExecutableConfig::new(
+        &get_dotnet_root(&env)?
+            .join(&exe_name)
+            .into_os_string()
+            .into_string()
+            .map_err(|_| anyhow!("unable to build path to the dotnet binary"))?,
+    );
+    primary.no_bin = true;
+    primary.no_shim = true;
 
     Ok(Json(LocateExecutablesOutput {
         primary: Some(primary),
