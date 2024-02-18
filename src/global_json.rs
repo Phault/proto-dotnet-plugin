@@ -1,4 +1,4 @@
-use std::ops::Mul;
+use std::ops::{Add, Mul};
 
 use proto_pdk::{UnresolvedVersionSpec, Version};
 use semver::Error;
@@ -74,7 +74,7 @@ impl GlobalJsonSdk {
                     max_version.minor,
                     // in 0.0.xyy x is the feature, yy is the patch
                     // hence we round semver patch to the next hundredth
-                    max_version.patch.div_ceil(100).mul(100)
+                    max_version.patch.div_ceil(100).add(1).mul(100)
                 );
 
                 UnresolvedVersionSpec::parse(format!(">={min_version} <{max_version}"))
