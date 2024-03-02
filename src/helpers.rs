@@ -13,5 +13,5 @@ pub fn get_dotnet_root(env: &HostEnvironment) -> Result<PathBuf, Error> {
     Ok(host_env!("DOTNET_ROOT")
         .map(PathBuf::from)
         // So we need our fallback to also be a real path
-        .unwrap_or_else(|| env.home_dir.real_path().join(".dotnet")))
+        .unwrap_or_else(|| env.home_dir.real_path().unwrap().join(".dotnet")))
 }

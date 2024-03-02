@@ -1,6 +1,6 @@
 [package]
 name = "dotnet_plugin"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MIT"
 publish = false
@@ -9,15 +9,15 @@ publish = false
 crate-type = ['cdylib']
 
 [dependencies]
-extism-pdk = { version = "1.0.1" }
-proto_pdk = { version = "0.15.2" }
+extism-pdk = { version = "1.1.0" }
+proto_pdk = { version = "0.17.3" }
 semver = "1.0.21"
-serde = "1.0.195"
+serde = "1.0.197"
 
 [dev-dependencies]
-proto_pdk_test_utils = { version = "0.17.3" }
-starbase_sandbox = "0.1.13"
-tokio = { version = "1.35.1", features = ["full"] }
+proto_pdk_test_utils = { version = "0.19.6" }
+starbase_sandbox = "0.4.0"
+tokio = { version = "1.36.0", features = ["full"] }
 
 [features]
 default = ["wasm"]

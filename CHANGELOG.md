@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+- Officially support proto 0.31.0
+- Updated dependencies
+
+## 0.2.1
+
+- Fix latestPatch in global.json not working
+
 ## 0.2.0
 
 #### Install natively using dotnet-install scripts
