@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Support .NET v1.x
+- Support SDK uninstallation\*
+- Detect SDK versions installed through other means
+- Fix SDK pre-releases not being installable
+
+\* This is currently limited to the SDK itself, not any associated runtimes or workloads.
+
 ## 0.2.2
 
 - Officially support proto 0.31.0
