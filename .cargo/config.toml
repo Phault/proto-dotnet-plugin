@@ -1,0 +1,3 @@
+[env]
+# having this set messes with tests as it'll be outside the sandbox
+DOTNET_ROOT = { value = "", force = true }

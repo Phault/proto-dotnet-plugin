@@ -10,6 +10,7 @@ use crate::{
 #[host_fn]
 extern "ExtismHost" {
     fn exec_command(input: Json<ExecCommandInput>) -> Json<ExecCommandOutput>;
+    fn to_virtual_path(input: String) -> String;
 }
 
 static NAME: &str = ".NET";
@@ -17,11 +18,15 @@ static BIN: &str = "dotnet";
 
 #[plugin_fn]
 pub fn register_tool(Json(_): Json<ToolMetadataInput>) -> FnResult<Json<ToolMetadataOutput>> {
+    let env = get_host_environment()?;
+    let dotnet_sdk_dir = virtual_path!(buf, get_dotnet_root(&env)?.join("sdk"));
+
     Ok(Json(ToolMetadataOutput {
         name: NAME.into(),
         type_of: PluginType::Language,
         plugin_version: Some(env!("CARGO_PKG_VERSION").into()),
         inventory: ToolInventoryMetadata {
+            override_dir: Some(dotnet_sdk_dir),
             // we'll stream the output from the dotnet-install script instead
             disable_progress_bars: true,
             ..Default::default()
@@ -175,10 +180,10 @@ pub fn native_install(
 pub fn native_uninstall(
     Json(_input): Json<NativeUninstallInput>,
 ) -> FnResult<Json<NativeUninstallOutput>> {
-    warn!("Uninstalling .NET sdks is not currently supported, as they all share their installation folder.");
+    warn!("This will only uninstall the SDK itself, not the runtime nor any installed workloads.");
 
     Ok(Json(NativeUninstallOutput {
-        uninstalled: false,
+        uninstalled: true,
         ..NativeUninstallOutput::default()
     }))
 }
@@ -203,4 +208,43 @@ pub fn locate_executables(
         primary: Some(primary),
         ..LocateExecutablesOutput::default()
     }))
+}
+
+#[plugin_fn]
+pub fn sync_manifest(Json(_): Json<SyncManifestInput>) -> FnResult<Json<SyncManifestOutput>> {
+    let env = get_host_environment()?;
+    let dotnet_sdk_dir = virtual_path!(buf, get_dotnet_root(&env)?.join("sdk"));
+
+    let mut output = SyncManifestOutput::default();
+    let mut versions = vec![];
+
+    // Path may not be whitelisted, so exit early instead of failing
+    let Ok(dirs) = fs::read_dir(dotnet_sdk_dir) else {
+        warn!("dotnet root is not whitelisted");
+        return Ok(Json(output));
+    };
+
+    for dir in dirs {
+        let dir = dir?.path();
+
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let name = dir.file_name().unwrap_or_default().to_string_lossy();
+
+        let Ok(spec) = UnresolvedVersionSpec::parse(name) else {
+            continue;
+        };
+
+        if let UnresolvedVersionSpec::Version(version) = spec {
+            versions.push(version);
+        }
+    }
+
+    if !versions.is_empty() {
+        output.versions = Some(versions);
+    }
+
+    Ok(Json(output))
 }
