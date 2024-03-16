@@ -4,7 +4,9 @@ use extism_pdk::*;
 use proto_pdk::*;
 
 use crate::{
-    global_json::GlobalJson, helpers::get_dotnet_root, release_index::fetch_release_index,
+    global_json::GlobalJson,
+    helpers::{get_dotnet_root, ANCIENT_VERSIONS},
+    release_index::fetch_release_index,
 };
 
 #[host_fn]
@@ -39,39 +41,24 @@ pub fn register_tool(Json(_): Json<ToolMetadataInput>) -> FnResult<Json<ToolMeta
 /// we're in wasm-land where multithreading isn't supported yet that would be very slow.
 ///
 /// So we rely on the published git tags instead which seem to correspond very well to the `sdk.version`
-/// field from the release index. A caveat being that this only covers v2+ and has some extra noise to
-/// filter out.
-///
-/// Alternatively we could add an option to rely on the slow but reliable method.
+/// field from the release index. A caveat being that this only covers v3+ and has some extra noise to
+/// filter out. Versions v1-2 are therefore embedded in the source code.
 #[plugin_fn]
 pub fn load_versions(Json(_): Json<LoadVersionsInput>) -> FnResult<Json<LoadVersionsOutput>> {
-    let tags = load_git_tags("https://github.com/dotnet/sdk")?
+    // we previously used the dotnet/sdk repo here as it included v2, but all prerelease versions were slightly off
+    let versions = load_git_tags("https://github.com/dotnet/installer")?
         .iter()
         .filter_map(|tag| tag.strip_prefix("v"))
         .filter(|tag| !tag.is_empty())
-        .map(|tag| tag.to_owned())
-        .collect::<Vec<_>>();
-
-    let mut versions = vec![];
-
-    for tag in tags {
-        let version = Version::parse(&tag);
-
-        match version {
-            Ok(v) => {
-                // there's a bunch of prereleases which aren't mentioned in the release index, so we filter them out
-                if v.pre.is_empty()
-                    || (v.pre.starts_with("preview") && !v.pre.ends_with("sdk"))
-                    || v.pre.starts_with("rc")
-                {
-                    versions.push(v);
-                }
-            }
-            _ => {
-                debug!("Unable to parse tag '{tag}' as a version");
-            }
-        }
-    }
+        .chain(ANCIENT_VERSIONS.iter().copied())
+        .filter_map(|tag| Version::parse(&tag).ok())
+        .filter(|version| match &version.pre {
+            pre if pre.is_empty() => true,
+            pre if pre.starts_with("preview") && !pre.ends_with("sdk") => true,
+            pre if pre.starts_with("rc") => true,
+            _ => false,
+        })
+        .collect();
 
     Ok(Json(LoadVersionsOutput::from_versions(versions)))
 }
